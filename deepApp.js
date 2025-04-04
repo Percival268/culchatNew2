@@ -4,7 +4,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const formMessage = document.querySelector('.form-message');
     const chatDisplay = document.querySelector('.chat-display');
     const userList = document.querySelector('.user-list');
-    const roomList = document.querySelector('.room-list');
     const activity = document.querySelector('.activity');
     const currentRoom = document.getElementById('current-room');
     const userCount = document.querySelector('.user-count');
@@ -12,39 +11,214 @@ document.addEventListener('DOMContentLoaded', function() {
     const customRoomInput = document.getElementById('custom-room');
     const roomSelection = document.querySelector('.room-selection');
     const chatInterface = document.querySelector('.chat-interface');
+    const messageInput = document.getElementById('message');
+    const nameInput = document.getElementById('name');
 
-    // Socket.io connection
-    const socket = io();
+    // WebSocket connection
+    let socket;
+    let currentNickname = '';
+    let currentRoomName = '';
+    let reconnectAttempts = 0;
+    const maxReconnectAttempts = 5;
+    const reconnectDelay = 3000; // 3 seconds
 
+    // Replace the initWebSocket function with this:
+function initWebSocket() {
+    const wsUrl = 'ws://localhost:8080';
+    console.log(`Connecting to ${wsUrl}...`);
+    
+    socket = new WebSocket(wsUrl);
 
-    // Mobile Menu Toggle
-document.addEventListener('DOMContentLoaded', function() {
-    const menuIcon = document.getElementById('menu-icon');
-    const navList = document.querySelector('.nav_list');
-    
-    menuIcon.addEventListener('click', function() {
-        navList.classList.toggle('active');
-        menuIcon.classList.toggle('bx-x');
-    });
-    
-    // Close menu when clicking on links
-    document.querySelectorAll('.nav_list a').forEach(link => {
-        link.addEventListener('click', () => {
-            navList.classList.remove('active');
-            menuIcon.classList.remove('bx-x');
-        });
-    });
-    
-    // Window resize handler
-    window.addEventListener('resize', function() {
-        if (window.innerWidth > 768) {
-            navList.classList.remove('active');
-            menuIcon.classList.remove('bx-x');
+    socket.onopen = function() {
+        console.log('WebSocket connected');
+        displaySystemMessage('Connected to chat server');
+        reconnectAttempts = 0;
+        
+        // Send initial join information
+        socket.send(JSON.stringify({
+            type: 'join',
+            nickname: currentNickname,
+            room: currentRoomName
+        }));
+    };
+
+    socket.onmessage = function(event) {
+        console.log('Received:', event.data);
+        try {
+            const data = JSON.parse(event.data);
+            handleServerMessage(data);
+        } catch (e) {
+            console.error('Error parsing message:', e);
         }
-    });
+    };
+
+    socket.onclose = function() {
+        console.log('WebSocket closed');
+        if (reconnectAttempts < maxReconnectAttempts) {
+            displaySystemMessage(`Connection lost. Reconnecting (${reconnectAttempts + 1}/${maxReconnectAttempts})...`);
+            setTimeout(initWebSocket, reconnectDelay);
+            reconnectAttempts++;
+        } else {
+            displaySystemMessage('Failed to connect to chat server. Please refresh the page.');
+        }
+    };
+
+    socket.onerror = function(error) {
+        console.error('WebSocket error:', error);
+        displaySystemMessage('Connection error: ' + error.message);
+    };
+}
+
+    // Handle messages from server
+    // Modify handleServerMessage to handle new message types:
+function handleServerMessage(data) {
+    try {
+        if (!data || !data.type) {
+            // Try to handle raw messages from Java server
+            if (typeof data === 'string') {
+                if (data.startsWith("MSG ")) {
+                    const content = data.substring(4);
+                    const colonPos = content.indexOf(':');
+                    const sender = colonPos > 0 ? content.substring(0, colonPos) : 'System';
+                    const msgContent = colonPos > 0 ? content.substring(colonPos + 2) : content;
+                    displayUserMessage(sender, msgContent);
+                } else {
+                    displaySystemMessage(data);
+                }
+            }
+            return;
+        }
+        
+        switch(data.type) {
+            case 'message':
+                displayUserMessage(data.sender || 'Unknown', data.content || '');
+                break;
+            case 'system':
+                displaySystemMessage(data.content || '');
+                break;
+            case 'user-list':
+                updateUserList(data.users || []);
+                break;
+            case 'nickname-request':
+                if (currentNickname) {
+                    socket.send(JSON.stringify({
+                        type: 'set-nickname',
+                        nickname: currentNickname
+                    }));
+                }
+                break;
+            default:
+                console.warn("Unknown message type:", data.type);
+        }
+    } catch (error) {
+        console.error("Error handling message:", error);
+    }
+}
+
+    // Send nickname to server
+    function sendNickname(nickname) {
+        if (socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({
+                type: 'set-nickname',
+                nickname: nickname,
+                room: currentRoomName
+            }));
+            currentNickname = nickname;
+        }
+    }
+
+    // Send chat message to server
+    function sendChatMessage(message) {
+        if (socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({
+                type: 'chat-message',
+                message: message
+            }));
+        }
+    }
+
+    // Join a chat room
+    function joinRoom(room) {
+        currentRoomName = room;
+        if (socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({
+                type: 'join-room',
+                room: room
+            }));
+        }
+    }
+
+    // Display system messages
+    function displaySystemMessage(text) {
+        displayMessage({
+            name: 'System',
+            text: text,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            isSystem: true
+        });
+    }
+
+    // Display user messages
+    function displayUserMessage(sender, text) {
+        displayMessage({
+            name: sender,
+            text: text,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            isBot: sender === 'CulChat Bot'
+        });
+    }
+
+    // Update user list
+    function updateUserList(users) {
+        userList.innerHTML = `
+            <h4>Culinary Companions:</h4>
+            <ul>
+                ${users.map(user => `<li>👨‍🍳 ${user}</li>`).join('')}
+            </ul>
+        `;
+    }
+
+    // Original displayMessage function with enhancements
+    function displayMessage(data) {
+        console.log("Displaying message:", data); // Debug log
+        
+        // Create message element
+        const messageElement = document.createElement('li');
+        messageElement.classList.add('message');
+        
+        // Add special classes for bot/system messages
+        if (data.isBot) {
+            messageElement.classList.add('bot-message');
+        } else if (data.isSystem) {
+            messageElement.classList.add('system-message');
+        }
     
-    // Rest of your existing JavaScript...
-});
+        // Format timestamp if not provided
+        const time = data.time || new Date().toLocaleTimeString([], { 
+            hour: '2-digit', 
+            minute: '2-digit'
+        });
+    
+        // Set message HTML
+        messageElement.innerHTML = `
+            <div class="message-info">
+                <span class="message-sender">${data.name || 'Unknown'}</span>
+                <span class="message-time">${time}</span>
+            </div>
+            <div class="message-text">${data.text || ''}</div>
+        `;
+        
+        // Append to chat display
+        const chatDisplay = document.querySelector('.chat-display');
+        if (chatDisplay) {
+            chatDisplay.appendChild(messageElement);
+            // Auto-scroll to bottom
+            chatDisplay.scrollTop = chatDisplay.scrollHeight;
+        } else {
+            console.error("Chat display element not found!");
+        }
+    }
+
     // Room selection change handler
     roomSelect.addEventListener('change', function(e) {
         if (e.target.value === 'custom') {
@@ -60,7 +234,6 @@ document.addEventListener('DOMContentLoaded', function() {
     formJoin.addEventListener('submit', function(e) {
         e.preventDefault();
         
-        const nameInput = document.getElementById('name');
         const name = nameInput.value.trim();
         let room;
         
@@ -71,120 +244,62 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         if (name && room) {
+            currentNickname = name;
+            currentRoomName = room;
+            
             // Show chat interface
             roomSelection.style.display = 'none';
             chatInterface.style.display = 'block';
             
-            // Join the room
-            socket.emit('joinRoom', { name, room });
-            
-            // Update UI
-            currentRoom.textContent = roomSelect.options[roomSelect.selectedIndex].text;
+            // Initialize WebSocket connection
+            initWebSocket();
             
             // Add welcome message
-            const welcomeMsg = {
-                name: 'CulChat Bot',
-                text: `Welcome to the ${roomSelect.options[roomSelect.selectedIndex].text}, ${name}! Start chatting about your culinary adventures.`,
-                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            };
-            displayMessage(welcomeMsg);
-            
-            // Add cooking tip
-            setTimeout(() => {
-                const tipMsg = {
-                    name: 'CulChat Bot',
-                    text: getRandomCookingTip(),
-                    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                };
-                displayMessage(tipMsg);
-            }, 3000);
+            displaySystemMessage(`Welcome to ${roomSelect.options[roomSelect.selectedIndex].text}, ${name}!`);
         }
     });
 
     // Message form submission
     formMessage.addEventListener('submit', function(e) {
         e.preventDefault();
-        
-        const messageInput = document.getElementById('message');
         const message = messageInput.value.trim();
         
         if (message) {
-            // Emit message to server
-            socket.emit('chatMessage', message);
-            
-            // Clear input
+            sendChatMessage(message);
             messageInput.value = '';
             messageInput.focus();
         }
     });
 
     // Typing indicator
-    const messageInput = document.getElementById('message');
-    messageInput.addEventListener('keypress', function() {
-        socket.emit('activity', socket.name);
-    });
-
-    // Listen for messages from server
-    socket.on('message', (data) => {
-        displayMessage(data);
-        // Scroll to bottom of chat
-        chatDisplay.scrollTop = chatDisplay.scrollHeight;
-        activity.textContent = '';
-    });
-
-    // Listen for activity from server
-    socket.on('activity', (name) => {
-        activity.textContent = `${name} is typing...`;
-        
-        // Clear after 3 seconds
-        setTimeout(() => {
-            activity.textContent = '';
-        }, 3000);
-    });
-
-    // Listen for user list updates
-    socket.on('userList', ({ users, room }) => {
-        displayUsers(users);
-        userCount.textContent = `${users.length} ${users.length === 1 ? 'chef' : 'chefs'} cooking here`;
-    });
-
-    // Display message in chat
-    function displayMessage(data) {
-        const li = document.createElement('li');
-        li.classList.add('message');
-        
-        // Special styling for bot messages
-        if (data.name === 'CulChat Bot') {
-            li.classList.add('bot-message');
-            li.innerHTML = `
-                <div class="message-info">
-                    <span class="message-sender">${data.name}</span>
-                    <span class="message-time">${data.time}</span>
-                </div>
-                <div class="message-text bot-text">${data.text}</div>
-            `;
-        } else {
-            li.innerHTML = `
-                <div class="message-info">
-                    <span class="message-sender">${data.name}</span>
-                    <span class="message-time">${data.time}</span>
-                </div>
-                <div class="message-text">${data.text}</div>
-            `;
+    let typingTimeout;
+    messageInput.addEventListener('input', function() {
+        if (socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({
+                type: 'typing-indicator',
+                isTyping: true
+            }));
+            
+            clearTimeout(typingTimeout);
+            typingTimeout = setTimeout(() => {
+                if (socket.readyState === WebSocket.OPEN) {
+                    socket.send(JSON.stringify({
+                        type: 'typing-indicator',
+                        isTyping: false
+                    }));
+                }
+            }, 2000);
         }
-        
-        chatDisplay.appendChild(li);
-    }
+    });
 
-    // Display users in room
-    function displayUsers(users) {
-        userList.innerHTML = `
-            <h4>Culinary Companions:</h4>
-            <ul>
-                ${users.map(user => `<li>👨‍🍳 ${user.name}</li>`).join('')}
-            </ul>
-        `;
-    }
+    // Handle beforeunload to notify server
+    window.addEventListener('beforeunload', function() {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({
+                type: 'leave-room'
+            }));
+        }
+    });
 
     // Random cooking tips for bot messages
     function getRandomCookingTip() {
@@ -202,15 +317,8 @@ document.addEventListener('DOMContentLoaded', function() {
         ];
         return tips[Math.floor(Math.random() * tips.length)];
     }
-});
 
-// Add to deepApp.js
-document.getElementById('menu-icon').addEventListener('click', function() {
-    document.querySelector('.nav_list').classList.toggle('active');
-});
-
-// Initialize Swiper when DOM is loaded
-document.addEventListener('DOMContentLoaded', function() {
+    // Initialize Swiper when DOM is loaded
     const swiper = new Swiper('.mySwiper', {
         loop: true,
         autoplay: {

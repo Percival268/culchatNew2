@@ -395,6 +395,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
     <script src="main.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/websocket@1.0.34/lib/WebSocket.min.js"></script>
     </main>
     <script>
         // Night Mode Toggle
@@ -429,6 +430,20 @@
             this.classList.toggle('bx-x');
         });
         
+        // Mobile Menu Toggle
+        document.getElementById('menu-icon').addEventListener('click', function() {
+                document.querySelector('.nav_list').classList.toggle('active');
+                this.classList.toggle('bx-x');
+            });
+            
+        // Close menu when clicking on links
+        document.querySelectorAll('.nav_list a').forEach(link => {
+            link.addEventListener('click', () => {
+                document.querySelector('.nav_list').classList.remove('active');
+                document.getElementById('menu-icon').classList.remove('bx-x');
+            });
+        });
+
         // Close menu when clicking on links
         document.querySelectorAll('.nav_list a').forEach(link => {
             link.addEventListener('click', () => {
