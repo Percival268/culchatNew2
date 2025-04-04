@@ -170,36 +170,42 @@ function handleServerMessage(data) {
 
     // Update user list
     function updateUserList(users) {
+        if (!Array.isArray(users)) {
+            console.error("Invalid users data:", users);
+            users = [];
+        }
+    
+        // Update user list display
         userList.innerHTML = `
             <h4>Culinary Companions:</h4>
             <ul>
-                ${users.map(user => `<li>👨‍🍳 ${user}</li>`).join('')}
+                ${users.map(user => `<li>👨‍🍳 ${user || 'Anonymous Chef'}</li>`).join('')}
             </ul>
         `;
+    
+        // Update user count display
+        const count = users.length;
+        userCount.textContent = `${count} ${count === 1 ? 'chef' : 'chefs'} cooking here`;
     }
 
     // Original displayMessage function with enhancements
     function displayMessage(data) {
-        console.log("Displaying message:", data); // Debug log
+        console.log("Displaying message:", data);
         
-        // Create message element
         const messageElement = document.createElement('li');
         messageElement.classList.add('message');
         
-        // Add special classes for bot/system messages
         if (data.isBot) {
             messageElement.classList.add('bot-message');
         } else if (data.isSystem) {
             messageElement.classList.add('system-message');
         }
     
-        // Format timestamp if not provided
         const time = data.time || new Date().toLocaleTimeString([], { 
             hour: '2-digit', 
             minute: '2-digit'
         });
     
-        // Set message HTML
         messageElement.innerHTML = `
             <div class="message-info">
                 <span class="message-sender">${data.name || 'Unknown'}</span>
@@ -208,14 +214,9 @@ function handleServerMessage(data) {
             <div class="message-text">${data.text || ''}</div>
         `;
         
-        // Append to chat display
-        const chatDisplay = document.querySelector('.chat-display');
         if (chatDisplay) {
             chatDisplay.appendChild(messageElement);
-            // Auto-scroll to bottom
             chatDisplay.scrollTop = chatDisplay.scrollHeight;
-        } else {
-            console.error("Chat display element not found!");
         }
     }
 

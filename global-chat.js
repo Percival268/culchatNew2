@@ -86,6 +86,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Handle incoming messages
     socket.onmessage = function(event) {
+        console.log("RAW message: ",event.data);
         try {
             const data = JSON.parse(event.data);
             handleServerMessage(data);
